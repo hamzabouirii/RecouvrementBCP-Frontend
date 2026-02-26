@@ -4,8 +4,6 @@ import {
   HiOutlineDocumentText,
   HiOutlineUserGroup,
   HiOutlineScale,
-  HiOutlineClipboardList,
-  HiOutlineCurrencyDollar,
 } from 'react-icons/hi';
 import logo from '../images/nvlogobp.jpg';
 
@@ -21,9 +19,9 @@ const menuItems = [
   {
     section: 'Amiable',
     items: [
-      { id: 'dossiers-amiable', label: 'Dossiers', icon: HiOutlineClipboardList },
+      { id: 'dossiers-amiable', label: 'Dossiers', icon: HiOutlineFolder },
       { id: 'cabinets', label: 'Cabinets', icon: HiOutlineUserGroup },
-      { id: 'factures-amiable', label: 'Factures', icon: HiOutlineCurrencyDollar },
+      { id: 'factures-amiable', label: 'Factures', icon: HiOutlineDocumentText },
     ],
   },
 ];

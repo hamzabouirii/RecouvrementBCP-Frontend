@@ -1,8 +1,67 @@
 import { HiOutlineDocumentText, HiX, HiOutlineInformationCircle } from 'react-icons/hi';
 
-export default function FacturationModal({ isOpen, onClose, dossier, honorairesTotal = 0, fraisTotal = 0, fraisList = [], onEmettre }) {
+/* ===== Same barème data as CalculHonorairesModal ===== */
+const ETAPES_LABELS = {
+    AER: 'Action en Responsabilité',
+    APN: 'Action Pénale',
+    ASS: 'Assignation au Paiement',
+    INJ: 'Injonction de Payer',
+    MCV: 'Mesures Conservatoires',
+    RHY: 'Réalisation Hypothécaire',
+    NFC: 'Réalisation Nantissement FDC/MAT',
+    PCL: 'Procédures Collectives',
+    VBM: 'Vente Bien Mobilier',
+};
+
+const BAREMES_MOCK = {
+    1: { type: 'pourcentage', pourcentage: 5, fixe: 0 },
+    2: { type: 'fixe', pourcentage: 0, fixe: 3000 },
+    3: { type: 'mixte', pourcentage: 3, fixe: 1500 },
+    4: { type: 'pourcentage', pourcentage: 4, fixe: 0 },
+    5: { type: 'mixte', pourcentage: 2, fixe: 2000 },
+};
+
+function calculerHonoraire(bareme, valeurY) {
+    if (!bareme) return 0;
+    switch (bareme.type) {
+        case 'fixe':
+            return bareme.fixe;
+        case 'pourcentage':
+            return (valeurY * bareme.pourcentage) / 100;
+        case 'mixte':
+            return bareme.fixe + (valeurY * bareme.pourcentage) / 100;
+        default:
+            return 0;
+    }
+}
+
+function buildHonorairesLignes(dossier, valeurY) {
+    const bareme = BAREMES_MOCK[dossier?.avocatId] || BAREMES_MOCK[1];
+    const etapesPassees = dossier?.historiqueEtapes || [];
+
+    const lignes = etapesPassees.map((ep) => ({
+        code: ep,
+        libelle: ETAPES_LABELS[ep] || ep,
+        honoraire: calculerHonoraire(bareme, valeurY),
+        isCurrent: false,
+    }));
+
+    lignes.push({
+        code: dossier?.etapeCode,
+        libelle: ETAPES_LABELS[dossier?.etapeCode] || dossier?.etapeCode,
+        honoraire: calculerHonoraire(bareme, valeurY),
+        isCurrent: true,
+    });
+
+    return lignes;
+}
+
+export default function FacturationModal({ isOpen, onClose, dossier, valeurY = 0, fraisTotal = 0, fraisList = [], onEmettre }) {
     if (!isOpen) return null;
 
+    /* Always compute detailed lines from dossier data */
+    const lignes = buildHonorairesLignes(dossier, valeurY);
+    const honorairesTotal = lignes.reduce((sum, l) => sum + l.honoraire, 0);
     const total = honorairesTotal + fraisTotal;
 
     const formatMontant = (val) =>
@@ -21,7 +80,7 @@ export default function FacturationModal({ isOpen, onClose, dossier, honorairesT
     const currentStatut = statutConfig[statut] || statutConfig.Brouillon;
 
     const handleEmettre = () => {
-        onEmettre?.();
+        onEmettre?.(lignes, honorairesTotal);
         onClose();
     };
 
@@ -52,17 +111,38 @@ export default function FacturationModal({ isOpen, onClose, dossier, honorairesT
                     <div className="info-box info">
                         <HiOutlineInformationCircle className="info-icon" />
                         <div>
-                            Récapitulatif de la facture incluant les honoraires cumulés et les frais supplémentaires.
+                            Récapitulatif de la facture avec le détail des honoraires par étape et les frais supplémentaires.
                         </div>
                     </div>
 
-                    {/* Lignes de détail */}
+                    {/* Detailed honoraires per étape — always shown */}
                     <div className="facture-lines">
-                        <div className="facture-line">
-                            <span className="line-label">📋 Honoraires (cumulés)</span>
-                            <span className="line-amount">{formatMontant(honorairesTotal)}</span>
+                        <div
+                            style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                textTransform: 'uppercase',
+                                color: 'var(--gray-400)',
+                                letterSpacing: 0.5,
+                                padding: '0 0 6px',
+                            }}
+                        >
+                            Détail des honoraires
                         </div>
 
+                        {lignes.map((ligne, idx) => (
+                            <div key={idx} className={`facture-line ${ligne.isCurrent ? 'facture-line-current' : ''}`}>
+                                <span className="line-label">
+                                    <span className="badge badge-etape" style={{ fontSize: 10, padding: '1px 6px', marginRight: 8 }}>
+                                        {ligne.code}
+                                    </span>
+                                    {ligne.libelle}
+                                </span>
+                                <span className="line-amount">{formatMontant(ligne.honoraire)}</span>
+                            </div>
+                        ))}
+
+                        {/* Frais supplémentaires */}
                         {fraisList.length > 0 && (
                             <>
                                 <div
@@ -88,12 +168,13 @@ export default function FacturationModal({ isOpen, onClose, dossier, honorairesT
 
                         {fraisList.length === 0 && (
                             <div className="facture-line">
-                                <span className="line-label">📎 Frais supplémentaires</span>
+                                <span className="line-label">Frais supplémentaires</span>
                                 <span className="line-amount">{formatMontant(0)}</span>
                             </div>
                         )}
                     </div>
 
+                    {/* Totals */}
                     <div className="recap-card">
                         <div className="recap-row">
                             <span className="label">Sous-total Honoraires</span>

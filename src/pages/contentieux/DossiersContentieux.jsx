@@ -159,7 +159,7 @@ const INITIAL_DOSSIERS = [
     },
 ];
 
-export default function DossiersContentieux() {
+export default function DossiersContentieux({ onEmettreFacture }) {
     const [dossiers, setDossiers] = useState(INITIAL_DOSSIERS);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterEtape, setFilterEtape] = useState('');
@@ -167,12 +167,12 @@ export default function DossiersContentieux() {
 
     /* Modal states */
     const [activeDossier, setActiveDossier] = useState(null);
-    const [activeModal, setActiveModal] = useState(null); // 'avocat' | 'selectionY' | 'honoraires' | 'frais' | 'facturation'
+    const [activeModal, setActiveModal] = useState(null);
 
     /* Per-dossier data (kept in memory) */
-    const [dossierData, setDossierData] = useState({}); // { [dossierId]: { valeurY, typeY, honorairesTotal, frais: [] } }
+    const [dossierData, setDossierData] = useState({});
 
-    const getData = (id) => dossierData[id] || { valeurY: 0, typeY: null, honorairesTotal: 0, frais: [] };
+    const getData = (id) => dossierData[id] || { valeurY: 0, typeY: null, frais: [] };
 
     const openModal = (dossier, modalType) => {
         setActiveDossier(dossier);
@@ -203,10 +203,8 @@ export default function DossiersContentieux() {
     };
 
     const handleHonoraires = (total, lignes) => {
-        setDossierData((prev) => ({
-            ...prev,
-            [activeDossier.id]: { ...getData(activeDossier.id), honorairesTotal: total },
-        }));
+        /* CalculHonorairesModal callback — we don't need to store lignes anymore,
+           FacturationModal computes its own. Just a no-op close. */
     };
 
     const handleFraisUpdate = (frais) => {
@@ -216,12 +214,34 @@ export default function DossiersContentieux() {
         }));
     };
 
-    const handleEmettre = () => {
+    const handleEmettre = (lignes, honorairesTotal) => {
+        const data = getData(activeDossier.id);
+        const fraisTotal = data.frais.reduce((s, f) => s + f.montant, 0);
+
         setDossiers((prev) =>
             prev.map((d) =>
                 d.id === activeDossier.id ? { ...d, factureStatut: 'Émise' } : d
             )
         );
+
+        onEmettreFacture?.({
+            id: Date.now(),
+            numero: `FAC-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
+            date_facture: new Date().toISOString().slice(0, 10),
+            montant_total: honorairesTotal + fraisTotal,
+            statut: 'BROUILLON',
+            dossier_reference: activeDossier.reference,
+            dossier_id: activeDossier.id,
+            client: activeDossier.client,
+            avocat: activeDossier.avocat,
+            etapeCode: activeDossier.etapeCode,
+            etapeLibelle: activeDossier.etapeLibelle,
+            honorairesLignes: lignes,
+            honorairesTotal,
+            fraisList: [...data.frais],
+            fraisTotal,
+            motif_rejet: null,
+        });
     };
 
     /* Filtering */
@@ -244,18 +264,6 @@ export default function DossiersContentieux() {
             Suspendu: 'badge-danger',
         };
         return map[statut] || 'badge-neutral';
-    };
-
-    const factureStatutBadge = (statut) => {
-        if (!statut) return null;
-        const map = {
-            Brouillon: 'badge-neutral',
-            Émise: 'badge-info',
-            Validée: 'badge-success',
-            Rejetée: 'badge-danger',
-            Payée: 'badge-success',
-        };
-        return <span className={`badge ${map[statut] || 'badge-neutral'}`} style={{ fontSize: 10 }}>{statut}</span>;
     };
 
     return (
@@ -336,44 +344,22 @@ export default function DossiersContentieux() {
                                 </td>
                                 <td>
                                     <span className={`badge ${statutBadge(dossier.statut)}`}>{dossier.statut}</span>
-                                    {' '}
-                                    {factureStatutBadge(dossier.factureStatut)}
                                 </td>
                                 <td>
                                     <div className="actions-cell">
-                                        <button
-                                            className="action-btn"
-                                            data-tooltip="Affecter Avocat"
-                                            onClick={() => openModal(dossier, 'avocat')}
-                                        >
+                                        <button className="action-btn" data-tooltip="Affecter Avocat" onClick={() => openModal(dossier, 'avocat')}>
                                             <HiOutlineScale />
                                         </button>
-                                        <button
-                                            className="action-btn"
-                                            data-tooltip="Base de calcul"
-                                            onClick={() => openModal(dossier, 'selectionY')}
-                                        >
+                                        <button className="action-btn" data-tooltip="Base de calcul" onClick={() => openModal(dossier, 'selectionY')}>
                                             <HiOutlineCalculator />
                                         </button>
-                                        <button
-                                            className="action-btn"
-                                            data-tooltip="Honoraires"
-                                            onClick={() => openModal(dossier, 'honoraires')}
-                                        >
+                                        <button className="action-btn" data-tooltip="Honoraires" onClick={() => openModal(dossier, 'honoraires')}>
                                             <HiOutlineCurrencyDollar />
                                         </button>
-                                        <button
-                                            className="action-btn"
-                                            data-tooltip="Frais Supp."
-                                            onClick={() => openModal(dossier, 'frais')}
-                                        >
+                                        <button className="action-btn" data-tooltip="Frais Supp." onClick={() => openModal(dossier, 'frais')}>
                                             <HiOutlinePlusCircle />
                                         </button>
-                                        <button
-                                            className="action-btn"
-                                            data-tooltip="Facturation"
-                                            onClick={() => openModal(dossier, 'facturation')}
-                                        >
+                                        <button className="action-btn" data-tooltip="Facturation" onClick={() => openModal(dossier, 'facturation')}>
                                             <HiOutlineDocumentText />
                                         </button>
                                     </div>
@@ -435,7 +421,7 @@ export default function DossiersContentieux() {
                 isOpen={activeModal === 'facturation'}
                 onClose={closeModal}
                 dossier={activeDossier}
-                honorairesTotal={activeDossier ? getData(activeDossier.id).honorairesTotal : 0}
+                valeurY={activeDossier ? getData(activeDossier.id).valeurY : 0}
                 fraisTotal={activeDossier ? getData(activeDossier.id).frais.reduce((s, f) => s + f.montant, 0) : 0}
                 fraisList={activeDossier ? getData(activeDossier.id).frais : []}
                 onEmettre={handleEmettre}
